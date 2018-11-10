@@ -5,5 +5,7 @@
 using namespace std;
 
 __global__ void AddVector() {
-
+	//
+	//
+	//
 }
