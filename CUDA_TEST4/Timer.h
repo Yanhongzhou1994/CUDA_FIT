@@ -1,6 +1,6 @@
 #pragma once
 #include "iostream"
-#include "afxwin.h"
+#include "windows.h"
 
 class stop_watch {
 public:

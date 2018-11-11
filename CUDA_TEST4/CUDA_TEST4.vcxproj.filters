@@ -52,8 +52,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="CudaKernal.cu">
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="CudaKernal.cu">
       <Filter>Source Files</Filter>
-    </None>
+    </CudaCompile>
   </ItemGroup>
 </Project>

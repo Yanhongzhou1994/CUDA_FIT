@@ -7,7 +7,7 @@
 #include <process.h>
 #include "CameraApi.h"
 #include "LaserRange.h"
-#include "afxwin.h"
+#include "windows.h"
 #include "math.h"
 #include "cstdlib"
 #include "sstream"
@@ -20,10 +20,7 @@
 using namespace std;
 using namespace cv;
 
-typedef struct GPoint {
-	int x;
-	int brightness;
-} GPoint;
+
 
 //±ﬂ‘µ≤‚ ‘À„∑®1
 void getPeaker1(Mat matImage, MPoint *point);

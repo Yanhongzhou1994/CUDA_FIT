@@ -8,7 +8,7 @@
 #include <process.h>
 #include "CameraApi.h"
 #include "LaserRange.h"
-#include "afxwin.h"
+#include "windows.h"
 #include "math.h"
 #include "cstdlib"
 #include "sstream"
@@ -798,7 +798,7 @@ void  getGaussCenter_horiColOnce(Mat matImage, MPoint *point, double maxError, d
 				point[k*Colonce + i].bright = exp(cvmGet(B, 0, 0) - cvmGet(B, 1, 0)*cvmGet(B, 1, 0) / (4 * cvmGet(B, 2, 0)));
 				cvReleaseMat(&X);
 				cvReleaseMat(&Z);
-				cvReleaseMat(&B);
+				cvReleaseMat(&B); 
 				cvReleaseMat(&SA);
 				cvReleaseMat(&SAN);
 				cvReleaseMat(&SC);

@@ -8,7 +8,7 @@
 #include <process.h>
 #include "CameraApi.h"
 #include "LaserRange.h"
-#include "afxwin.h"
+#include "windows.h"
 #include "math.h"
 #include "cstdlib"
 #include "sstream"
@@ -21,12 +21,18 @@
 #include <device_functions.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <opencv2/opencv.hpp>
+#include <opencv2/core/cuda.hpp>
+#include "CudaTest.h"
+//#include "CudaKernal.cuh"
 
-#define THREAD_NUM 16
+
+#define THREAD_NUM 1024
 using namespace std;
 using namespace cv;
+using namespace cv::cuda;
 
-extern "C" void vectorAdd(float *x, float*y, float*z);
+
 
 int printDeviceProp(cudaDeviceProp &prop) {
 	printf("Device Name:%s.\n", prop.name);
@@ -88,6 +94,7 @@ void GlobalTest() {
 	//vectorAdd<<<1, 10>>>(x, y, z);
 }
 
-void CudaGuassHC(Mat matImage, MPoint *point) {
 
-}
+
+
+

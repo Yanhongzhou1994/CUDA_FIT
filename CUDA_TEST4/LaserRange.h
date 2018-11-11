@@ -8,7 +8,7 @@
 #include "cxcore.h"
 #include <opencv2/opencv.hpp>
 #include <process.h>
-#include "afxwin.h"
+//#include "afxwin.h"
 #include "math.h"
 #include "cstdlib"
 
@@ -67,6 +67,10 @@ typedef struct MPoint
 	int errorup;
 } MPoint;
 
+typedef struct GPoint {
+	int x;
+	int brightness;
+} GPoint;
 
 //张正友相机标定法
 void calibfirst(Mat matImage);

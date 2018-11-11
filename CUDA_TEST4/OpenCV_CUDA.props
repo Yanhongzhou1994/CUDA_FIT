@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <IncludePath>D:\opencv_cuda\install\include;D:\opencv_cuda\install\include\opencv;D:\opencv_cuda\install\include\opencv2;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\opencv_cuda\install\x64\vc15\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>opencv_calib3d343.lib;opencv_core343.lib;opencv_cudaarithm343.lib;opencv_cudabgsegm343.lib;opencv_cudacodec343.lib;opencv_cudafeatures2d343.lib;opencv_cudafilters343.lib;opencv_cudaimgproc343.lib;opencv_cudalegacy343.lib;opencv_cudaobjdetect343.lib;opencv_cudaoptflow343.lib;opencv_cudastereo343.lib;opencv_cudawarping343.lib;opencv_cudev343.lib;opencv_dnn343.lib;opencv_features2d343.lib;opencv_flann343.lib;opencv_highgui343.lib;opencv_imgcodecs343.lib;opencv_imgproc343.lib;opencv_ml343.lib;opencv_objdetect343.lib;opencv_shape343.lib;opencv_photo343.lib;opencv_stitching343.lib;opencv_superres343.lib;opencv_video343.lib;opencv_videoio343.lib;opencv_videostab343.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup />
+</Project>
