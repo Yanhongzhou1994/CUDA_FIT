@@ -185,6 +185,8 @@
     <None Include="cpp.hint" />
     <CudaCompile Include="CudaKernal.cu">
       <FileType>Document</FileType>
+      <Runtime Condition="'$(Configuration)|$(Platform)'=='Release|x64'">InheritFromHost</Runtime>
+      <GPUDebugInfo Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GPUDebugInfo>
     </CudaCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

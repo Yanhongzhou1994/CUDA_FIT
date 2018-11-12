@@ -34,3 +34,5 @@ bool InitCuda();
 
 extern "C"
 void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce);
+extern "C"
+__global__ void GetGaussPointCuda(PtrStepSz<int> src, MPoint *point, double maxError, double minError, int yRange, int Colonce, int Rows, int Cols);

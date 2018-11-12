@@ -51,17 +51,18 @@ __device__ void SetElementZ(int *Z, int) {
 __device__ void MatrixInvert(int *a, int *at, int M) {
 
 }
-//矩阵转置
 
-__global__ void GetGaussFitCuda(PtrStepSz<uchar> src,MPoint *point, double maxError, double minError, int yRange, int Colonce,int Rows,int Cols) {
+
+__global__ void GetGaussPointCuda(PtrStepSz<int> src,MPoint *point, double maxError, double minError, int yRange, int Colonce,int Rows,int Cols) {
 	int threadId = threadIdx.x;
+	//printf("%d\n",threadId);
 	int *gpu_cr = new int [Rows*Colonce];
 	//逐行存入数组
 	for (int j = 0; j < Rows; j++)
 	{
 		for (int i = 0; i < Colonce; i++)
 		{
-			gpu_cr[i*Rows+j] = src(threadId*i, j);
+			gpu_cr[i*Rows+j] = src(threadId*Colonce + i,j);
 		}
 	}
 	
@@ -81,28 +82,29 @@ __global__ void GetGaussFitCuda(PtrStepSz<uchar> src,MPoint *point, double maxEr
 		point[threadId*Colonce + i].y = MaxY;
 		point[threadId*Colonce + i].bright = MaxPixel;
 	}
-
+	
 	//高斯点筛选
 	for (int i = 0; i < Colonce; i++)
 	{
 		int Pixnum = 0;
-		GPoint *gpoint;
-		gpoint = new GPoint[Rows];
+		//GPoint *gpoint;
+		point[i].gpoint = new GPoint[Rows];
+		//point[i].gpoint = new GPoint[Rows];
 		for (int j = 0; j < Rows; j++)
 		{
 			if ((gpu_cr[Rows*i + j] > minError*point[threadId*Colonce + i].bright)
 				&& (gpu_cr[Rows*i + j] < (1 - maxError)*point[threadId*Colonce + i].bright)
 				&& (abs(j - point[threadId*Colonce + i].y) < yRange))
 			{
-				gpoint[Pixnum].x = threadId * Colonce + i;
-				gpoint[Pixnum].brightness = gpu_cr[Rows*i + j];
+				point[i].gpoint[Pixnum].x = threadId * Colonce + i;
+				point[i].gpoint[Pixnum].brightness = gpu_cr[Rows*i + j];
 				Pixnum++;
 			}
 			if ((j - point[threadId*Colonce + i].y) < yRange)
 				break;
 		}
 
-
+		/*
 		//矩阵运算
 		if (Pixnum >= 3)
 		{
@@ -135,32 +137,111 @@ __global__ void GetGaussFitCuda(PtrStepSz<uchar> src,MPoint *point, double maxEr
 				}
 				Z[i] = gpoint[i].brightness;
 			}
+			//求X转置
 			__shared__ int *XT;
-			XT = new int[Pixnum * 3];
-			for (int i = 0; i < Pixnum; i++)
+			XT = new int[Pixnum* 3];
+			for (int i = 0; i < 3; i++)
 			{
-
+				for (int j = 0; j < Pixnum; j++)
+				{
+					XT[i*Pixnum + j] = X[j * 3 + i];
+				}
 			}
+			//求XT*X结果
+			__shared__ int *SA;
+			SA = new int[3 * 3];
+			for (int m = 0; i < 3; i++)
+			{
+				for (int s = 0; s < 3; s++)
+				{
+					for (int n = 0; n < Pixnum; n++)
+					{
+						SA[m * 3 + s] = XT[m*Pixnum + n] * X[n * 3 + s];
+					}
+				}
+			}
+			//求SA逆矩阵
+			__shared__ int *SAN;
+			SAN = new int[3 * 3];
+
 			
-		}
+		}*/
 	}
-	delete gpu_cr;	
+	delete &gpu_cr;	
+	__syncthreads();
+}
+
+//#define N 3
+//__global__ void MatAdd(const int **A, const int **B, int **C)
+//{
+//	int i = threadIdx.x;
+//	int j = threadIdx.y;
+//	C[i][j] = A[i][j] + B[i][j];
+//	//__syncthreads();
+//}
+__global__ void getEveryPixel(PtrStep<uchar> gpuMat, PtrStep<uchar> outMat, int Rows, int Cols) {
+	int i = threadIdx.x + blockDim.x*blockIdx.x;
+	int j = threadIdx.y + blockDim.y*blockIdx.y;
+	if (i < Cols&&j < Rows)
+	{
+		//outmat = 
+	}
 }
 
 
-
 //extern "C" void GetGaussFitCuda(GpuMat gpuMat, MPoint *point, double maxError, double minError, int yRange, int Colonce);
+
 extern "C"
 void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce) {
+
 	int Rows = matImage.rows;
-	int Cols = matImage.cols*matImage.channels();
-	GpuMat gpuMat;
+	int Cols = matImage.cols;// matImage.channels();
+	InputArray inputMat(matImage);
+	GpuMat gpuMat(Rows, Cols, CV_8UC1);
 	gpuMat.upload(matImage);
-	dim3 blocks_all(1,0,0);
-	dim3 threads_all(Cols / Colonce,0,0);
-	GetGaussFitCuda<<<1,threads_all>>>(gpuMat, point, maxError, minError, yRange, Colonce,Rows,Cols);
-	
-	
+	//for (int j = 0; j < Rows; j++) {
+	//	//uchar* data = gpuMat.ptr<uchar>(j);
+	//	for (int i = 0; i < Cols; i++) {
+	//		int datt = gpuMat.ptr<uchar>(j)[i];
+	//		//cout << "(" << i << "," <<j << "):" << datt << endl;
+	//		printf("(%d,%d):%d\n", i, j, datt);
+	//	}
+	//}
+
+	//dim3 blocks_all(1);
+	dim3 threads_all(Cols / Colonce);
+
+	GetGaussPointCuda << <1, threads_all >> > (gpuMat, point, maxError, minError, yRange, Colonce, Rows, Cols);
+	for (int i = 0; i < Cols; i++)
+	{
+		//cout << "("<<point[i].x<<","<< point[i].y<<"):"<< point[i].bright << endl;
+		printf("(%d,%d):%d\n", point[i].x, point[i].y, point[i].bright);
+	}
+
+
+	gpuMat.release();
+
+
+	////test for krenal global
+	//int numBlocks = 1;
+	//dim3 threadsPerBlock(3, 3);
+	//const int A[3][3] = { {3,3,3},{2,2,2},{1,1,1} };
+	//const int B[3][3] = { {3,3,3},{2,2,2},{1,1,1} };
+	//int C[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
+	//const int **a = &A[0][0];
+	//const int *b = &B[0][0];
+	//int *c = &C[0][0];
+	//MatAdd << <numBlocks, threadsPerBlock >> > (a, b, c);
+	//for (int i = 0; i < 3; i++)
+	//{
+	//	for (int j = 0; j < 3; j++) {
+	//		cout << C[i][j] << "   ";
+	//	}
+	//	cout << endl;
+	//}
+	//getchar();
+
+
 }
 
 

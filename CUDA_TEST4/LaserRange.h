@@ -54,6 +54,11 @@ public:
 	int CaptureImage(IplImage *iplimage);
 };
 
+typedef struct GPoint {
+	int x;
+	int brightness;
+} GPoint;
+
 typedef struct MPoint
 {
 	int x;
@@ -62,15 +67,13 @@ typedef struct MPoint
 	double cy;
 	int bright;
 	int Pixnum;
-	int xstart;
-	int xstop;
-	int errorup;
+	//int xstart;
+	//int xstop;
+	//int errorup;
+	GPoint *gpoint;
 } MPoint;
 
-typedef struct GPoint {
-	int x;
-	int brightness;
-} GPoint;
+
 
 //张正友相机标定法
 void calibfirst(Mat matImage);
