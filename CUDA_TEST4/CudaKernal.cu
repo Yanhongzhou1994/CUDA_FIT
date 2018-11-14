@@ -21,6 +21,7 @@
 #include "CudaTest.h"
 #include <device_launch_parameters.h>
 #include <device_functions.h>
+
 //#include <stdio.h>
 //#include <stdlib.h>
 #include <opencv2/opencv.hpp>
@@ -34,75 +35,71 @@ using namespace cv::cuda;
 //extern "C" void GetGaussFitCuda(GpuMat gpuMat, MPoint *point, double maxError, double minError, int yRange, int Colonce);
 
 //矩阵乘法 a[M][N]*b[N][S]
-__device__ void MatrixMul(int *a, int *b, int *result, int M, int N, int S) {
-	int row = threadIdx.x;
-	int col = threadIdx.y;
-
-}
-//矩阵存入
-__device__ void SetElementX( GPoint *gpoint, int *X, int Pixnum) {
-	int threadId = threadIdx.x;
-
-}
-__device__ void SetElementZ(int *Z, int) {
-
-}
-//矩阵求逆 m阶a矩阵
-__device__ void MatrixInvert(int *a, int *at, int M) {
-
+cudaError_t checkCudaError(cudaError_t CudaFunction,const char* ident) {
+	cudaError_t err = CudaFunction;
+	if (err != cudaSuccess) {
+		fprintf(stderr, "%s \t cudaError:%s\n",ident,cudaGetErrorString(cudaGetLastError()));
+	}
+	return err;
 }
 
-
-__global__ void GetGaussPointCuda(PtrStepSz<int> src,MPoint *point, double maxError, double minError, int yRange, int Colonce,int Rows,int Cols) {
+__global__ void GetGaussPointCuda(PtrStepSz<uchar1> src,MPoint *point, int **gpu_data, double maxError, double minError, int yRange, int Colonce,int Rows,int Cols) {
 	int threadId = threadIdx.x;
 	//printf("%d\n",threadId);
-	int *gpu_cr = new int [Rows*Colonce];
+    //__shared__ int *gpu_cr;
+	//gpu_cr = new int [Rows*Cols];
 	//逐行存入数组
+	//MTest << <1, 1 >> > (1);
 	for (int j = 0; j < Rows; j++)
 	{
 		for (int i = 0; i < Colonce; i++)
 		{
-			gpu_cr[i*Rows+j] = src(threadId*Colonce + i,j);
+			gpu_data[i+threadId*Colonce][j] = (int)src(j, threadId*Colonce + i).x;                
 		}
 	}
+	//int i = 0, j = 0;
+	//gpu_cr[i*Rows + j] = *((int*)&src( j, threadId*Colonce + i));
 	
 	//取每列最大值位置
 	for (int i = 0; i < Colonce; i++) {
-		int MaxPixel = gpu_cr[Rows*i];
+		int MaxPixel = gpu_data[i+threadId*Colonce][0];
+		//printf("the first pixel is %d \n", MaxPixel);
 		int MaxY = 0;
 		for (int j = 1; j < Rows; j++)
 		{
-			if (gpu_cr[Rows*i + j] > MaxPixel)
+			if (gpu_data[i+threadId*Colonce][j] > MaxPixel)
 			{
-				MaxPixel = gpu_cr[Rows*i + j];
+				MaxPixel = gpu_data[i + threadId * Colonce][j];
 				MaxY = j;
 			}
-		}
+		}		
+
 		point[threadId*Colonce + i].x = threadId * Colonce + i;
 		point[threadId*Colonce + i].y = MaxY;
 		point[threadId*Colonce + i].bright = MaxPixel;
 	}
 	
 	//高斯点筛选
-	for (int i = 0; i < Colonce; i++)
-	{
-		int Pixnum = 0;
-		//GPoint *gpoint;
-		point[i].gpoint = new GPoint[Rows];
-		//point[i].gpoint = new GPoint[Rows];
-		for (int j = 0; j < Rows; j++)
-		{
-			if ((gpu_cr[Rows*i + j] > minError*point[threadId*Colonce + i].bright)
-				&& (gpu_cr[Rows*i + j] < (1 - maxError)*point[threadId*Colonce + i].bright)
-				&& (abs(j - point[threadId*Colonce + i].y) < yRange))
-			{
-				point[i].gpoint[Pixnum].x = threadId * Colonce + i;
-				point[i].gpoint[Pixnum].brightness = gpu_cr[Rows*i + j];
-				Pixnum++;
-			}
-			if ((j - point[threadId*Colonce + i].y) < yRange)
-				break;
-		}
+	//for (int i = 0; i < Colonce; i++)
+	//{
+	//	int Pixnum = 0;
+	//	//GPoint *gpoint;
+	//	//point[threadId*Colonce+i].gpoint = new GPoint[Rows];
+	//	//point[i].gpoint = new GPoint[Rows];
+	//	for (int j = 0; j < Rows; j++)
+	//	{
+	//		if ((gpu_cr[Rows*i + j] > minError*point[threadId*Colonce + i].bright)
+	//			&& (gpu_cr[Rows*i + j] < (1 - maxError)*point[threadId*Colonce + i].bright)
+	//			&& (abs(j - point[threadId*Colonce + i].y) < yRange))
+	//		{
+	//			point[threadId*Colonce + i].gpoint[Pixnum].x = threadId * Colonce + i;
+	//			point[threadId*Colonce + i].gpoint[Pixnum].brightness = gpu_cr[Rows*i + j];
+	//			Pixnum++;
+	//		}
+	//		if ((j - point[threadId*Colonce + i].y) < yRange)
+	//			break;
+	//	}
+	//	point[threadId*Colonce + i].Pixnum = Pixnum;
 
 		/*
 		//矩阵运算
@@ -164,10 +161,10 @@ __global__ void GetGaussPointCuda(PtrStepSz<int> src,MPoint *point, double maxEr
 			__shared__ int *SAN;
 			SAN = new int[3 * 3];
 
-			
+
 		}*/
-	}
-	delete &gpu_cr;	
+	//}
+	//delete &gpu_cr;
 	__syncthreads();
 }
 
@@ -184,7 +181,7 @@ __global__ void getEveryPixel(PtrStep<uchar> gpuMat, PtrStep<uchar> outMat, int 
 	int j = threadIdx.y + blockDim.y*blockIdx.y;
 	if (i < Cols&&j < Rows)
 	{
-		//outmat = 
+	
 	}
 }
 
@@ -195,10 +192,19 @@ extern "C"
 void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce) {
 
 	int Rows = matImage.rows;
-	int Cols = matImage.cols;// matImage.channels();
-	InputArray inputMat(matImage);
-	GpuMat gpuMat(Rows, Cols, CV_8UC1);
-	gpuMat.upload(matImage);
+	int Cols = matImage.cols;// *matImage.channels();
+	//InputArray inputMat(matImage);
+	//for (int j = 0; j < Rows; j++) {
+	//	//uchar* data = gpuMat.ptr<uchar>(j);
+	//	for (int i = 0; i < Cols; i++) {
+	//		int datt = inputMat.ptr<uchar>(j)[i];
+	//		//cout << "(" << i << "," <<j << "):" << datt << endl;
+	//		printf("(%d,%d):%d\n", i, j, datt);
+	//	}
+	//}
+	//cout << Cols << endl;
+	GpuMat gpuMat(matImage);
+	//gpuMat.upload(matImage);
 	//for (int j = 0; j < Rows; j++) {
 	//	//uchar* data = gpuMat.ptr<uchar>(j);
 	//	for (int i = 0; i < Cols; i++) {
@@ -207,18 +213,44 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 	//		printf("(%d,%d):%d\n", i, j, datt);
 	//	}
 	//}
+	//结构体指针上传
+	MPoint *gpu_point;
+	//gpu_point = new MPoint[Cols];	
+	checkCudaError(cudaMalloc((void**)&gpu_point, sizeof(MPoint)*Cols), "malloc error1");
+	//显存图像缓存矩阵
+	int **gpu_data;
+	int *gpu_data_d;
+	int **cpu_data = (int**)malloc(sizeof(int*)*Cols);
+	int *cpu_data_d = (int*)malloc(sizeof(int)*Cols*Rows);
+	checkCudaError(cudaMalloc((void**)&gpu_data, Cols * sizeof(int**)), "malloc error2");
+	checkCudaError(cudaMalloc((void**)&gpu_data_d, Cols *Rows * sizeof(int)), " malloc error2");
+	for (int i = 0; i < Cols; i++) {
+		cpu_data[i] = gpu_data_d + Rows * i;
+		//首地址赋值 将一维矩阵转为二维
+	}
+	checkCudaError(cudaMemcpy(gpu_data, cpu_data, sizeof(int*)*Cols, cudaMemcpyHostToDevice), "memcpy error1");
+	checkCudaError(cudaMemcpy(gpu_data_d, cpu_data_d, sizeof(int)*Rows*Cols, cudaMemcpyHostToDevice), "memcpy error1");
+	   
 
-	//dim3 blocks_all(1);
-	dim3 threads_all(Cols / Colonce);
 
-	GetGaussPointCuda << <1, threads_all >> > (gpuMat, point, maxError, minError, yRange, Colonce, Rows, Cols);
+
+	/*if (cudaSuccess != cudaMemcpy(gpu_point, point, sizeof(point)*Cols, cudaMemcpyHostToDevice)) {
+		printf("cuda memcpy up error1!\n");
+	}*/
+	
+	//dim3 threads_all(Cols / Colonce);
+
+	GetGaussPointCuda << <1, Cols/Colonce >> > (gpuMat, gpu_point, gpu_data, maxError, minError, yRange, Colonce, Rows, Cols);
+	cudaDeviceSynchronize();
+	checkCudaError(cudaMemcpy(point, gpu_point, sizeof(MPoint)*Cols, cudaMemcpyDeviceToHost), "memcpy down error1");
 	for (int i = 0; i < Cols; i++)
 	{
 		//cout << "("<<point[i].x<<","<< point[i].y<<"):"<< point[i].bright << endl;
-		printf("(%d,%d):%d\n", point[i].x, point[i].y, point[i].bright);
+		printf("(%d,%d):%d\t, here are %d GaussPoints\n", point[i].x, point[i].y, point[i].bright,point[i].Pixnum);
 	}
 
-
+	cudaFree(gpu_point);
+	cudaFree(gpu_data);
 	gpuMat.release();
 
 
@@ -240,8 +272,10 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 	//	cout << endl;
 	//}
 	//getchar();
-
-
 }
 
+extern "C" void GuassFitGpuHcT(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce)
+{
+
+}
 

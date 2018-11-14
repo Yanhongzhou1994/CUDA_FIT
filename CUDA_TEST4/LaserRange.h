@@ -70,7 +70,7 @@ typedef struct MPoint
 	//int xstart;
 	//int xstop;
 	//int errorup;
-	GPoint *gpoint;
+	//GPoint *gpoint;
 } MPoint;
 
 

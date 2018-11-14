@@ -989,6 +989,7 @@ void getDiff1test(Mat matImage, MPoint *point) {
 		else if ((point[j].x != samepoint.x) && error) {
 			error++;
 		}
+
 		else if (((point[j].x) == samepoint.x) && error) {
 			//判断error是否符合标准
 			if (error >= errormin && error <= errormax) {
