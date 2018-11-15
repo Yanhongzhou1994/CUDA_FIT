@@ -43,41 +43,167 @@ cudaError_t checkCudaError(cudaError_t CudaFunction,const char* ident) {
 	return err;
 }
 
-__global__ void GetGaussPointCuda(PtrStepSz<uchar1> src,MPoint *point, int **gpu_data, double maxError, double minError, int yRange, int Colonce,int Rows,int Cols) {
+//Coloncel行扫描得点存储
+__global__ void GetGaussPointCuda(PtrStepSz<uchar1> src, MPoint *point, int **gpu_data, int Colonce, int Rows, int Cols) {
 	int threadId = threadIdx.x;
 	//printf("%d\n",threadId);
-    //__shared__ int *gpu_cr;
+	//__shared__ int *gpu_cr;
 	//gpu_cr = new int [Rows*Cols];
 	//逐行存入数组
-	//MTest << <1, 1 >> > (1);
 	for (int j = 0; j < Rows; j++)
 	{
 		for (int i = 0; i < Colonce; i++)
 		{
-			gpu_data[i+threadId*Colonce][j] = (int)src(j, threadId*Colonce + i).x;                
+			gpu_data[i + threadId * Colonce][j] = (int)src(j, threadId*Colonce + i).x;
 		}
 	}
 	//int i = 0, j = 0;
 	//gpu_cr[i*Rows + j] = *((int*)&src( j, threadId*Colonce + i));
-	
+
 	//取每列最大值位置
 	for (int i = 0; i < Colonce; i++) {
-		int MaxPixel = gpu_data[i+threadId*Colonce][0];
+		int MaxPixel = gpu_data[i + threadId * Colonce][0];
 		//printf("the first pixel is %d \n", MaxPixel);
 		int MaxY = 0;
 		for (int j = 1; j < Rows; j++)
 		{
-			if (gpu_data[i+threadId*Colonce][j] > MaxPixel)
+			if (gpu_data[i + threadId * Colonce][j] > MaxPixel)
 			{
 				MaxPixel = gpu_data[i + threadId * Colonce][j];
 				MaxY = j;
 			}
-		}		
+		}
 
 		point[threadId*Colonce + i].x = threadId * Colonce + i;
 		point[threadId*Colonce + i].y = MaxY;
 		point[threadId*Colonce + i].bright = MaxPixel;
 	}
+	__syncthreads();
+}
+
+//按列筛选并处理高斯点
+__global__ void GetGaussFitRes(MPoint *point, int **gpu_data, double maxError, double minError, int yRange, int Rows, int Cols) 
+{
+	//通过块并行解决一个block内thread不够用的问题
+	int threadId = blockIdx.x*blockDim.x + threadIdx.x;
+	//判断以确定该线程有可处理数据
+	if (threadId < Cols)
+	{
+		////高斯点存储申请
+		//int *y; //存储高斯点在每列的行位置
+		//int *br; //存储高斯点的值
+		GPoint *gpoint = new GPoint[2 * yRange];
+		int Pixnum = 0; //统计高斯点个数
+		//确定上下界位置 减少计算次数
+		double minLine = minError * point[threadId].bright;
+		double maxLine = (1-maxError) * point[threadId].bright;
+		//高斯点筛选
+		for (int i = (point[threadId].y - yRange); i < (point[threadId].y+yRange+1); i++)
+		{
+			if ((gpu_data[threadId][i] > minLine)&&(gpu_data[threadId][i] < maxLine))
+			{
+				gpoint[Pixnum].x = i;
+				gpoint[Pixnum].brightness = gpu_data[threadId][i];
+				Pixnum++;
+			}
+		}
+		point[threadId].Pixnum = Pixnum;
+		/*
+		if (Pixnum > 3) {
+			//运算矩阵申请
+			int n = Pixnum;
+			//X矩阵（1 x x^2）  n*3
+			double **X = new double*[n];
+			for (int i = 0; i < n; i++) {
+				X[i] = new double[3];
+			}
+			//XT矩阵 X的转置  3*n
+			double **XT = new double*[3];
+			for (int i = 0; i < 3; i++) {
+				XT[i] = new double[n];
+			}
+			//Z矩阵(brightness) n*1
+			double *Z = new double[n];
+			//B矩阵（结果） 3*1
+			double *B = new double[3];
+			//SA矩阵 （XT*X） 3*3
+			double **SA = new double*[3];
+			for (int i = 0; i < 3; i++) {
+				SA[i] = new double[3];
+			}
+			//SAN矩阵 SA的逆矩阵  3*3
+			double **SAN = new double*[3];
+			for (int i = 0; i < 3; i++) {
+				SAN[i] = new double[3];
+			}
+			//SC矩阵  SAN*XT 3*n
+			double **SC = new double *[3];
+			for (int i = 0; i < 3; i++) {
+				SC[i] = new double[n];
+			}
+			//存入X矩阵和Z矩阵 顺手存入转置XT
+			for (int i = 0; i < n; i++) {
+				X[i][0] = 1;
+				X[i][1] = gpoint[i].x;
+				X[i][2] = gpoint[i].x*gpoint[i].x;
+				Z[i] = gpoint[i].brightness;
+				XT[0][i] = 1;
+				XT[1][i] = gpoint[i].x;
+				XT[2][i] = gpoint[i].x*gpoint[i].x;
+			}
+			//计算XT*X
+			for (int m = 0; m < 3; m++) {
+				for (int s = 0; s < 3; s++) {
+					SA[m][s] = 0;
+					for (int i = 0; i < n; i++) {
+						SA[m][s] += XT[m][i] * X[i][s];
+					}
+				}
+			}
+			//计算SAN
+			for (int i = 0; i < 3; i++) {
+				for (int j = 0; j < 3; j++) {
+					SAN[i][j] = 0;
+				}
+			}
+			//计算SC = SAN*XT
+			for (int m = 0; m < 3; m++) {
+				for (int s = 0; s < n; s++) {
+					SC[m][s] = 0;
+					for (int i = 0; i < 3; i++) {
+						SC[m][s] += SAN[m][i] * XT[i][s];
+					}
+				}
+			}
+			//计算B = SC*Z
+			for (int m = 0; m < 3; m++) {
+				B[m] = 0;
+				for (int i = 0; i < n; i++) {
+					B[m] += SC[m][i] * Z[i];
+				}
+			}
+			//解析B
+			point[threadId].cx = threadId;
+			point[threadId].cy = (-B[1]) / (2 * B[2]);
+			point[threadId].bright = exp(B[0] - B[1] * B[1] / (4 * B[2]));
+
+		}
+		else
+		{
+			point[threadId].cx = threadId;
+			point[threadId].cy = 0;
+			point[threadId].bright = 0;
+		}
+		
+		*/
+		
+		delete[] gpoint;
+
+	}
+	else
+		return;
+
+}
 	
 	//高斯点筛选
 	//for (int i = 0; i < Colonce; i++)
@@ -165,8 +291,7 @@ __global__ void GetGaussPointCuda(PtrStepSz<uchar1> src,MPoint *point, int **gpu
 		}*/
 	//}
 	//delete &gpu_cr;
-	__syncthreads();
-}
+	
 
 //#define N 3
 //__global__ void MatAdd(const int **A, const int **B, int **C)
@@ -176,14 +301,7 @@ __global__ void GetGaussPointCuda(PtrStepSz<uchar1> src,MPoint *point, int **gpu
 //	C[i][j] = A[i][j] + B[i][j];
 //	//__syncthreads();
 //}
-__global__ void getEveryPixel(PtrStep<uchar> gpuMat, PtrStep<uchar> outMat, int Rows, int Cols) {
-	int i = threadIdx.x + blockDim.x*blockIdx.x;
-	int j = threadIdx.y + blockDim.y*blockIdx.y;
-	if (i < Cols&&j < Rows)
-	{
-	
-	}
-}
+
 
 
 //extern "C" void GetGaussFitCuda(GpuMat gpuMat, MPoint *point, double maxError, double minError, int yRange, int Colonce);
@@ -229,19 +347,28 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 		//首地址赋值 将一维矩阵转为二维
 	}
 	checkCudaError(cudaMemcpy(gpu_data, cpu_data, sizeof(int*)*Cols, cudaMemcpyHostToDevice), "memcpy error1");
-	checkCudaError(cudaMemcpy(gpu_data_d, cpu_data_d, sizeof(int)*Rows*Cols, cudaMemcpyHostToDevice), "memcpy error1");
-	   
-
-
+	checkCudaError(cudaMemcpy(gpu_data_d, cpu_data_d, sizeof(int)*Rows*Cols, cudaMemcpyHostToDevice), "memcpy error1");  
 
 	/*if (cudaSuccess != cudaMemcpy(gpu_point, point, sizeof(point)*Cols, cudaMemcpyHostToDevice)) {
 		printf("cuda memcpy up error1!\n");
 	}*/
 	
 	//dim3 threads_all(Cols / Colonce);
-
-	GetGaussPointCuda << <1, Cols/Colonce >> > (gpuMat, gpu_point, gpu_data, maxError, minError, yRange, Colonce, Rows, Cols);
+	//每colonce列统一存入 
+	GetGaussPointCuda << <1, Cols/Colonce >> > (gpuMat, gpu_point, gpu_data, Colonce, Rows, Cols);
 	cudaDeviceSynchronize();
+	//规划并行流  之后设计为只规划一次
+	int Blocknum, Threadnum;
+	if (Cols > 1024) {
+		Blocknum = Cols / 1024 + 1;
+		Threadnum = 1024;
+	}
+	else {
+		Blocknum = 1;
+		Threadnum = Cols;
+	}
+	//进行高斯拟合
+	GetGaussFitRes << <Blocknum, Threadnum >> > (gpu_point, gpu_data, maxError, minError, yRange, Rows, Cols);
 	checkCudaError(cudaMemcpy(point, gpu_point, sizeof(MPoint)*Cols, cudaMemcpyDeviceToHost), "memcpy down error1");
 	for (int i = 0; i < Cols; i++)
 	{
@@ -249,29 +376,23 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 		printf("(%d,%d):%d\t, here are %d GaussPoints\n", point[i].x, point[i].y, point[i].bright,point[i].Pixnum);
 	}
 
-	cudaFree(gpu_point);
+	/*for (int i = 0; i < Cols; i++)
+	{
+		free((void*)cpu_data[i]);
+	}*/
+	free((void*)cpu_data);
+	free(cpu_data_d);
+	/*for (int i = 0; i < Cols; i++)
+	{
+		cudaFree((void*)gpu_data[i]);
+	}*/
 	cudaFree(gpu_data);
+	cudaFree(gpu_point);
+	cudaFree(gpu_data_d);
 	gpuMat.release();
 
 
-	////test for krenal global
-	//int numBlocks = 1;
-	//dim3 threadsPerBlock(3, 3);
-	//const int A[3][3] = { {3,3,3},{2,2,2},{1,1,1} };
-	//const int B[3][3] = { {3,3,3},{2,2,2},{1,1,1} };
-	//int C[3][3] = { {0,0,0},{0,0,0},{0,0,0} };
-	//const int **a = &A[0][0];
-	//const int *b = &B[0][0];
-	//int *c = &C[0][0];
-	//MatAdd << <numBlocks, threadsPerBlock >> > (a, b, c);
-	//for (int i = 0; i < 3; i++)
-	//{
-	//	for (int j = 0; j < 3; j++) {
-	//		cout << C[i][j] << "   ";
-	//	}
-	//	cout << endl;
-	//}
-	//getchar();
+
 }
 
 extern "C" void GuassFitGpuHcT(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce)
