@@ -73,7 +73,16 @@ typedef struct MPoint
 	//GPoint *gpoint;
 } MPoint;
 
-
+typedef struct MatrixUnion
+{
+	double **X;
+	double **XT;
+	double *Z;
+	double *B;
+	double **SA;
+	double **SAN;
+	double **SC;
+}MatrixUnion;
 
 //张正友相机标定法
 void calibfirst(Mat matImage);
