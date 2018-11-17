@@ -82,7 +82,7 @@ __global__ void GetGaussPointCuda(PtrStepSz<uchar1> src, MPoint *point, int **gp
 }
 
 //按列筛选并处理高斯点
-__global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_data, double maxError, double minError, int yRange, int Rows, int Cols) 
+__global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_data, double maxError, double minError, int yRange, int Rows, int Cols,int Precision) 
 {
 	//通过块并行解决一个block内thread不够用的问题
 	int threadId = blockIdx.x*blockDim.x + threadIdx.x;
@@ -116,23 +116,23 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 			int n = Pixnum;
 			
 			//X矩阵（1 x x^2）  n*3
-			gpu_mar[threadId].X = new double *[n];
+			gpu_mar[threadId].X = new long long int *[n];
 			for (int i = 0; i < n; i++) {
-				gpu_mar[threadId].X[i] = new double[3];
+				gpu_mar[threadId].X[i] = new long long int[3];
 			}
 			//XT矩阵 X的转置  3*n
-			gpu_mar[threadId].XT = new double *[3];
+			gpu_mar[threadId].XT = new long long int *[3];
 			for (int i = 0; i < 3; i++) {
-				gpu_mar[threadId].XT[i] = new double[n];
+				gpu_mar[threadId].XT[i] = new long long int[n];
 			}
 			//Z矩阵(brightness) n*1
-			gpu_mar[threadId].Z = new double[n];
+			gpu_mar[threadId].Z = new long long int[n];
 			//B矩阵（结果） 3*1
-			gpu_mar[threadId].B = new double[3];
+			gpu_mar[threadId].B = new long long int[3];
 			//SA矩阵 （XT*X） 3*3
-			gpu_mar[threadId].SA = new double *[3];
+			gpu_mar[threadId].SA = new long long int *[3];
 			for (int i = 0; i < 3; i++) {
-				gpu_mar[threadId].SA[i] = new double[3];
+				gpu_mar[threadId].SA[i] = new long long int[3];
 			}
 			//SAN矩阵 SA的逆矩阵  3*3
 			gpu_mar[threadId].SAN = new double *[3];
@@ -142,7 +142,7 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 			//SC矩阵  SAN*XT 3*n
 			gpu_mar[threadId].SC = new double *[3];
 			for (int i = 0; i < 3; i++) {
-				gpu_mar[threadId].SC[i] = new double[n];
+				gpu_mar[threadId].SC[i] = new double [n];
 			}
 
 
@@ -179,14 +179,23 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 			
 			//存入X矩阵和Z矩阵 顺手存入转置XT
 			for (int i = 0; i < n; i++) {
-				gpu_mar[threadId].X[i][0] = 1;
-				gpu_mar[threadId].X[i][1] = gpoint[i].x;
-				gpu_mar[threadId].X[i][2] = gpoint[i].x*gpoint[i].x;
-				gpu_mar[threadId].Z[i] = gpoint[i].brightness;
-				gpu_mar[threadId].XT[0][i] = 1;
-				gpu_mar[threadId].XT[1][i] = gpoint[i].x;
-				gpu_mar[threadId].XT[2][i] = gpoint[i].x*gpoint[i].x;
+				gpu_mar[threadId].X[i][0] = 1*Precision;
+				gpu_mar[threadId].X[i][1] = gpoint[i].x*Precision;
+				gpu_mar[threadId].X[i][2] = gpoint[i].x*gpoint[i].x*Precision;
+				gpu_mar[threadId].Z[i] = gpoint[i].brightness*Precision;
+				gpu_mar[threadId].XT[0][i] = 1 * Precision;
+				gpu_mar[threadId].XT[1][i] = gpoint[i].x*Precision;
+				gpu_mar[threadId].XT[2][i] = gpoint[i].x*gpoint[i].x*Precision;
 			}
+			/*for (int i_ = 0; i_ < n; i_++)
+			{
+				for (int j_ = 0; j_ < 3; j_++)
+				{
+					printf("%d\t", gpu_mar[threadId].X[i_][j_]);
+				}
+				printf("\n");
+				
+			}*/
 			//计算SA = XT*X
 			for (int m = 0; m < 3; m++) {
 				for (int s = 0; s < 3; s++) {
@@ -197,6 +206,16 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 				}
 			}
 			
+			/*if (threadId == 20) {
+				for (int i_ = 0; i_ < 3; i_++)
+				{
+					for (int j_ = 0; j_ < 3; j_++)
+					{
+						printf("%lld\t", gpu_mar[threadId].SA[i_][j_]);
+					}
+					printf("\n");
+				}
+			}*/
 			
 			//计算SAN
 			const int mat_num = 3;//求逆矩阵的阶数
@@ -227,29 +246,30 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 
 			for (int i = 0; i < mat_num; i++)
 			{
+				//L矩阵建立
 				gpu_mar[threadId].L = new double*[mat_num];
 				double **L = gpu_mar[threadId].L;
-
 				for (int i_ = 0; i_ < mat_num; i_++)
 				{
 					L[i_] = new double[mat_num];
 				}
+				//U矩阵建立
 				gpu_mar[threadId].U = new double*[mat_num];
 				double **U = gpu_mar[threadId].U;
 				for (int i_ = 0; i_ < mat_num; i_++)
 				{
 					U[i_] = new double[mat_num];
 				}
+
 				gpu_mar[threadId].P = new int[mat_num];
 				int *P = gpu_mar[threadId].P;
-				gpu_mar[threadId].A_mirror = new double*[mat_num];
-				double **A_mirror = gpu_mar[threadId].A_mirror;
-
+				//SA复制
+				gpu_mar[threadId].A_mirror = new long long int*[mat_num];
+				long long int **A_mirror = gpu_mar[threadId].A_mirror;
 				for (int i_ = 0; i_ < mat_num; i_++)
 				{
-					A_mirror[i_] = new double[mat_num];
+					A_mirror[i_] = new long long int[mat_num];
 				}
-
 				for (int i_ = 0; i_ < mat_num; i_++)
 				{
 					for (int j_ = 0; j_ < mat_num; j_++)
@@ -265,7 +285,7 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 					P[i_] = i_;
 				for (int i_ = 0; i_ < mat_num - 1; i_++)
 				{
-					double p = 0;
+					int p = 0;
 					for (int j_ = i_; j_ < mat_num; j_++)
 					{
 						if (A_mirror[j_][i_] > p || (-1)* A_mirror[j_][i_] > p)
@@ -275,10 +295,12 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 						}
 					}
 
+					/*
 					if (p == 0)
 					{
 						;
 					}
+					*/
 
 					//交换P[i_] P[row]
 					int tmp = P[i_];
@@ -362,7 +384,6 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 			
 			}
 
-			//double tmp = 0;
 			for (int i_ = 0; i_ < mat_num; i_++)
 			{
 				for (int j_ = 0; j_ < i_; j_++)
@@ -379,7 +400,17 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 			for (int i = 0; i < mat_num; i++)
 				delete[]BC[i];
 			delete[]BC;
-			
+/*
+			if (threadId == 20) {
+				for (int i_ = 0; i_ < mat_num; i_++)
+				{
+					for (int j_ = 0; j_ < mat_num; j_++)
+					{
+						printf("%lf\t", gpu_mar[threadId].SAN[i_][j_]);
+					}
+					printf("\n");
+				}
+			}*/
 			
 			//计算SC = SAN*XT
 			for (int m = 0; m < 3; m++) {
@@ -390,6 +421,16 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 					}
 				}
 			}
+			/*if (threadId == 20) {
+				for (int i_ = 0; i_ < 3; i_++)
+				{
+					for (int j_ = 0; j_ < n; j_++)
+					{
+						printf("%lf\t", gpu_mar[threadId].SC[i_][j_]);
+					}
+					printf("\n");
+				}
+			}*/
 			//计算B = SC*Z
 			for (int m = 0; m < 3; m++) {
 				gpu_mar[threadId].B[m] = 0;
@@ -398,9 +439,11 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 				}
 			}
 			//解析B
+			//printf("B1 = %d , B2 = %d\n", gpu_mar[threadId].B[1], gpu_mar[threadId].B[2]);
 			point[threadId].cx = threadId;
-			point[threadId].cy = (-gpu_mar[threadId].B[1]) / (2 * gpu_mar[threadId].B[2]);
-			point[threadId].gaussbright = exp((float)(gpu_mar[threadId].B[0] - gpu_mar[threadId].B[1] * gpu_mar[threadId].B[1] / (4 * gpu_mar[threadId].B[2])));
+			point[threadId].cy = (-gpu_mar[threadId].B[1]) / ((2 * gpu_mar[threadId].B[2]));
+
+			//point[threadId].gaussbright = exp((float)(gpu_mar[threadId].B[0] - gpu_mar[threadId].B[1] * gpu_mar[threadId].B[1] / (4 * gpu_mar[threadId].B[2])));
 			
 			
 			for (int i = 0; i < n; i++) {
@@ -545,7 +588,7 @@ __global__ void GetGaussFitRes(MPoint *point, MatrixUnion *gpu_mar,int **gpu_dat
 //extern "C" void GetGaussFitCuda(GpuMat gpuMat, MPoint *point, double maxError, double minError, int yRange, int Colonce);
 
 extern "C"
-void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce) {
+void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, int yRange, int Colonce,int Precision) {
 
 	int Rows = matImage.rows;
 	int Cols = matImage.cols;// *matImage.channels();
@@ -599,7 +642,7 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 	GetGaussPointCuda << <1, Cols/Colonce >> > (gpuMat, gpu_point, gpu_data, Colonce, Rows, Cols);
 	cudaDeviceSynchronize();
 	//规划并行流  之后设计为只规划一次
-	const int BlockPMat = 1024;
+	const int BlockPMat = 1280;
 	int Blocknum, Threadnum;
 	Blocknum = BlockPMat;
 	Threadnum = Cols / Blocknum+1;
@@ -614,16 +657,16 @@ void CudaGuassHC(Mat matImage, MPoint *point, double maxError, double minError, 
 	}
 	*/
 	//进行高斯拟合
-	GetGaussFitRes << <Blocknum, Threadnum >> > (gpu_point, gpu_mar,gpu_data, maxError, minError, yRange, Rows, Cols);
+	GetGaussFitRes << <Blocknum, Threadnum >> > (gpu_point, gpu_mar,gpu_data, maxError, minError, yRange, Rows, Cols,Precision);
 	cudaDeviceSynchronize();
 	checkCudaError(cudaMemcpy(point, gpu_point, sizeof(MPoint)*Cols, cudaMemcpyDeviceToHost), "memcpy down error1");
-	/*
-	for (int i = 0; i < Cols; i++)
-	{
-		//cout << "("<<point[i].x<<","<< point[i].y<<"):"<< point[i].bright << endl;
-		printf("(%d,%d):%d\t, here are %d GaussPoints, the result is （%lf,%lf）\n", point[i].x, point[i].y, point[i].bright,point[i].Pixnum,point[i].cx,point[i].cy);
-	}
-	*/
+	
+	//for (int i = 0; i < Cols; i++)
+	//{
+	//	//cout << "("<<point[i].x<<","<< point[i].y<<"):"<< point[i].bright << endl;
+	//	printf("(%d,%d):%d\t, here are %d GaussPoints, the result is （%lf,%lf）\n", point[i].x, point[i].y, point[i].bright,point[i].Pixnum,point[i].cx,point[i].cy);
+	//}
+	//
 
 	/*for (int i = 0; i < Cols; i++)
 	{
