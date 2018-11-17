@@ -67,6 +67,7 @@ typedef struct MPoint
 	double cy;
 	int bright;
 	int Pixnum;
+	double gaussbright;
 	//int xstart;
 	//int xstop;
 	//int errorup;
@@ -80,8 +81,15 @@ typedef struct MatrixUnion
 	double *Z;
 	double *B;
 	double **SA;
-	double **SAN;
+	double **SAN;//逆矩阵
 	double **SC;
+	double **in_v;//逆矩阵的转置
+	double **BC; // 
+	double **L; //LU过程矩阵L
+	double **U; //LU过程矩阵U
+	double **A_mirror;  //原矩阵的复制
+	int *P; //LUP 记录列坐标
+
 }MatrixUnion;
 
 //张正友相机标定法
